@@ -1,0 +1,2 @@
+# finboard
+FinBoard Dashboard & Bot
