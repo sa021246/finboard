@@ -167,4 +167,9 @@ if __name__ == "__main__":
             for s,norm,name,cond,en in demo_a:
                 conn.execute("INSERT INTO alerts(user_id,symbol,symbol_norm,name,cond,enabled,created_ts,updated_ts) VALUES(0,?,?,?,?,?, ?,?)",(s,norm,name,cond,en,now_ts,now_ts))
         conn.commit()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    import os
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
