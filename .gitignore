@@ -1,0 +1,20 @@
+# --- secrets & env ---
+.env
+*.env
+
+# --- database & logs ---
+backend/finboard.db
+logs/
+
+# --- python ---
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- OS/Editors ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
