@@ -1,5 +1,0 @@
-Flask==3.0.3
-flask-cors==4.0.0
-yfinance==0.2.52
-pandas>=2.0.0
-numpy>=1.26.0

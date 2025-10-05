@@ -1,20 +1,69 @@
-# --- secrets & env ---
+# --- Secrets / Env ---
 .env
 *.env
+token.json
+credentials.json
 
-# --- database & logs ---
-backend/finboard.db
+# --- Databases ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Logs / Reports ---
 logs/
+*.log
+*.out
+*.err
+coverage/
+htmlcov/
+*.coverage
+*.lcov
 
-# --- python ---
-.venv/
+# --- Python cache / build ---
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytype/
+.pytest_cache/
+.mypy_cache/
+.cache/
+dist/
+build/
+*.egg-info/
+.eggs/
 
-# --- OS/Editors ---
+# --- Virtual envs ---
+.venv/
+venv/
+env/
+ENV/
+.ptyhonenv/
+pip-wheel-metadata/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
-.idea/
-.vscode/
+desktop.ini
+
+# --- Node (若前端用到) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+package-lock.json
+
+# --- Frontend builds (若有) ---
+*.map
+.sass-cache/
+.cache-loader/
+.next/
+.out/
+dist-ssr/
+vite-dist/
+public/build/
