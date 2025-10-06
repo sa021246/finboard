@@ -153,6 +153,28 @@ def dashboard():
 def root():
     return jsonify({"name":"FinBoard v4.0-alpha.1","dashboard":"/dashboard","auth":"set API_TOKEN env; send Bearer token for write ops"})
 
+###################################################################################################▼
+
+@app.get("/health")
+def health():
+    # 簡單的 DB 健檢（可省略）
+    db_ok = True
+    try:
+        with db_conn() as conn:
+            conn.execute("SELECT 1")
+    except Exception:
+        db_ok = False
+
+    return jsonify(
+        ok=True,
+        name="FinBoard",
+        version="v4.0-alpha.2",
+        db=db_ok,
+        time=datetime.utcnow().isoformat() + "Z"
+    )
+
+###################################################################################################▲
+
 if __name__ == "__main__":
     init_db()
     with db_conn() as conn:
