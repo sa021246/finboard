@@ -177,6 +177,8 @@ def health():
 
 ###################################################################################################▼
 
+app = Flask(__name__)
+
 @app.route("/price_api")
 def price_api():
     from flask import request
