@@ -121,6 +121,33 @@ def alerts_list():
         rows = conn.execute("SELECT id,symbol,symbol_norm,COALESCE(name,'') AS name,COALESCE(cond,'') AS cond,enabled,COALESCE(last_triggered_ts,0) AS last_triggered_ts FROM alerts WHERE user_id=0 ORDER BY id DESC").fetchall()
     return jsonify([dict(r) for r in rows])
 
+################################################################################################▼
+# 建議放在 ~120 行附近，與其他 api_bp routes 放一起
+@api_bp.route("/price", methods=["GET"])
+def api_price():
+    sym = request.args.get("sym", "USD/TWD")
+    prices = {
+        "USD/TWD": 32.5,
+        "USD/JPY": 150.3,
+        "BTC/USD": 65000,
+        "2330.TW": 830
+    }
+    price = prices.get(sym.upper())
+    if price is None:
+        return jsonify({"error": f"Symbol '{sym}' not found"}), 404
+    return jsonify({
+        "symbol": sym,
+        "price": price,
+        "source": "demo data",
+        "timestamp": datetime.utcnow().isoformat()+"Z"
+    })
+
+
+# L145（或 api_price() 區塊結束的下一行）〈— 新增（只需要加一次）
+app.register_blueprint(api_bp, url_prefix="/api")
+
+
+#################################################################################################▲
 @app.route("/api/alerts/<int:aid>", methods=["PATCH"])
 def alerts_patch(aid:int):
     init_db()
@@ -151,7 +178,8 @@ def dashboard():
 
 @app.route("/")
 def root():
-    return jsonify({"name":"FinBoard v4.0-alpha.1","dashboard":"/dashboard","auth":"set API_TOKEN env; send Bearer token for write ops"})
+    return jsonify({"name": f"FinBoard {VERSION}", "dashboard":"/dashboard", "auth":"set API_TOKEN env; send Bearer token for write ops."})
+
 
 ###################################################################################################▼
 
@@ -168,7 +196,7 @@ def health():
     return jsonify(
         ok=True,
         name="FinBoard",
-        version="v4.0-alpha.2",
+        "version": VERSION,
         db=db_ok,
         time=datetime.utcnow().isoformat() + "Z"
     )
@@ -179,9 +207,12 @@ def health():
 
 app = Flask(__name__)
 
-@app.route("/price_api")
+# L182 〈— 新增
+api_bp = Blueprint("api", __name__)
+
+
+@app.route("/price_api", methods=["GET"], strict_slashes=False)
 def price_api():
-    #from flask import request
     sym = request.args.get("sym", "USD/TWD")
     # 模擬價格查詢
     prices = {
