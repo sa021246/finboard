@@ -181,7 +181,7 @@ app = Flask(__name__)
 
 @app.route("/price_api")
 def price_api():
-    from flask import request
+    #from flask import request
     sym = request.args.get("sym", "USD/TWD")
     # 模擬價格查詢
     prices = {
