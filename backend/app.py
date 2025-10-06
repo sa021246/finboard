@@ -175,6 +175,33 @@ def health():
 
 ###################################################################################################▲
 
+###################################################################################################▼
+
+@app.route("/price_api")
+def price_api():
+    from flask import request
+    sym = request.args.get("sym", "USD/TWD")
+    # 模擬價格查詢
+    prices = {
+        "USD/TWD": 32.5,
+        "USD/JPY": 150.3,
+        "BTC/USD": 65000,
+        "2330.TW": 830
+    }
+    price = prices.get(sym.upper(), None)
+    if price is None:
+        return jsonify({"error": f"Symbol '{sym}' not found"}), 404
+    return jsonify({
+        "symbol": sym,
+        "price": price,
+        "source": "demo data",
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    })
+
+
+###################################################################################################▲
+
+
 if __name__ == "__main__":
     init_db()
     with db_conn() as conn:
