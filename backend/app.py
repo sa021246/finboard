@@ -2,7 +2,7 @@
 import os, re, math, sqlite3
 from contextlib import contextmanager
 from datetime import datetime
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Blueprint
 from flask_cors import CORS
 import yfinance as yf
 
@@ -17,6 +17,13 @@ API_TOKEN = os.getenv("API_TOKEN", "DEMO-TOKEN")
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/dashboard")
 CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+###########################################################################################▼
+app = Flask(__name__)
+
+api_bp = Blueprint("api", __name__)   # <-- 新增這行
+
+###########################################################################################▲
 
 @contextmanager
 def db_conn():
@@ -146,6 +153,10 @@ def api_price():
         "timestamp": datetime.utcnow().isoformat()+"Z"
     })
 
+################################################################################▼
+
+app.register_blueprint(api_bp, url_prefix="/api")
+################################################################################▲
 
 # L145（或 api_price() 區塊結束的下一行）〈— 新增（只需要加一次）
 app.register_blueprint(api_bp, url_prefix="/api")
