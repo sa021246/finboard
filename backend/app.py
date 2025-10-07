@@ -6,6 +6,10 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import yfinance as yf
 
+# 放在所有 route 之前（建議放在檔案最上方 imports 之後）
+VERSION = os.getenv("APP_VERSION", "v4.0-alpha.2")
+
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "finboard.db")
 FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend", "dashboard")
@@ -193,13 +197,14 @@ def health():
     except Exception:
         db_ok = False
 
-    return jsonify(
-        ok=True,
-        name="FinBoard",
+    return jsonify({
+        "name": f"FinBoard {VERSION}",
+        "dashboard": "/dashboard",
         "version": VERSION,
-        db=db_ok,
-        time=datetime.utcnow().isoformat() + "Z"
-    )
+        "auth": "set API_TOKEN env; send Bearer token for write ops"
+    })
+
+
 
 ###################################################################################################▲
 
