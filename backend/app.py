@@ -158,10 +158,6 @@ def api_price():
 app.register_blueprint(api_bp, url_prefix="/api")
 ################################################################################▲
 
-# L145（或 api_price() 區塊結束的下一行）〈— 新增（只需要加一次）
-app.register_blueprint(api_bp, url_prefix="/api")
-
-
 #################################################################################################▲
 @app.route("/api/alerts/<int:aid>", methods=["PATCH"])
 def alerts_patch(aid:int):
@@ -220,12 +216,6 @@ def health():
 ###################################################################################################▲
 
 ###################################################################################################▼
-
-app = Flask(__name__)
-
-# L182 〈— 新增
-api_bp = Blueprint("api", __name__)
-
 
 @app.route("/price_api", methods=["GET"], strict_slashes=False)
 def price_api():
