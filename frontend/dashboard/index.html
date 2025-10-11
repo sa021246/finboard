@@ -104,5 +104,21 @@ alT.addEventListener('change', async (e)=>{
 ref.addEventListener('click', async ()=>{ const s=sel.value; const pr=await jget(API+'/api/price?symbol='+encodeURIComponent(s)); priceEl.textContent = pr.price ?? '-'; etoro.href = etoroUrl(s); });
 
 loadWL(); loadAL(); setTimeout(()=>ref.click(),300);
+
+
 </script>
-</body></html>
+
+<script>
+  window.FINBOARD_API_BASE = "https://finboard-ol3p.onrender.com";  /* 例： https://finboard.onrender.com */
+</script>
+
+
+<script src="js/API.js"></script>
+<script>
+  API.getPrice("USD/TWD")
+    .then(data => console.log("💱 匯率資料:", data))
+    .catch(err => console.error("❌ 錯誤:", err));
+</script>
+
+</body>
+</html>

@@ -1,256 +1,109 @@
-# -*- coding: utf-8 -*-
-import os, re, math, sqlite3
-from contextlib import contextmanager
-from datetime import datetime
-from flask import Flask, request, jsonify, send_from_directory, Blueprint
+# app.py
+import os
+from datetime import datetime, timezone
+from flask import Flask, Blueprint, jsonify, request, redirect
 from flask_cors import CORS
-import yfinance as yf
 
-# 放在所有 route 之前（建議放在檔案最上方 imports 之後）
-VERSION = os.getenv("APP_VERSION", "v4.0-alpha.2")
+from dotenv import load_dotenv
+load_dotenv()
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "finboard.db")
-FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend", "dashboard")
-API_TOKEN = os.getenv("API_TOKEN", "DEMO-TOKEN")
 
-# 只初始化一次，且保留 static_folder 設定
-app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path="/dashboard")
+# -------- 基本設定 --------
+app = Flask(__name__)
+# 先開放 /api/* 的跨網域；上線後把 origins 換成你的前端網域
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# 建立 blueprint（單一個即可）
+VERSION = os.getenv("APP_VERSION", "v4.0-alpha.2")
+
 api_bp = Blueprint("api", __name__)
 
-@contextmanager
-def db_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-    finally:
-        conn.close()
+def now_iso_z():
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-SCHEMA_ALERTS = '''
-CREATE TABLE IF NOT EXISTS alerts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL DEFAULT 0,
-    symbol TEXT NOT NULL,
-    symbol_norm TEXT NOT NULL,
-    cond TEXT,
-    name TEXT,
-    enabled INTEGER DEFAULT 1,
-    last_triggered_ts INTEGER,
-    created_ts INTEGER,
-    updated_ts INTEGER
-);
-'''
-SCHEMA_WATCHLIST = '''
-CREATE TABLE IF NOT EXISTS watchlist (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL DEFAULT 0,
-    symbol TEXT NOT NULL,
-    symbol_norm TEXT NOT NULL,
-    label TEXT,
-    created_ts INTEGER,
-    updated_ts INTEGER
-);
-'''
-
-def init_db():
-    with db_conn() as conn:
-        c = conn.cursor()
-        c.execute(SCHEMA_ALERTS)
-        c.execute(SCHEMA_WATCHLIST)
-        conn.commit()
-
-_alias_map = {"BTC":"BTC-USD","BTCUSD":"BTC-USD","ETH":"ETH-USD","ETHUSD":"ETH-USD","TSMC":"2330.TW"}
-_fx_pat = re.compile(r"^([A-Z]{3})/([A-Z]{3})$")
-def normalize_symbol(raw: str) -> str:
-    s = raw.strip().upper()
-    m = _fx_pat.match(s)
-    if m: return f"{m.group(1)}{m.group(2)}=X"
-    return _alias_map.get(s, s)
-
-def price_of(symbol_or_pair: str):
-    ticker = normalize_symbol(symbol_or_pair)
-    try:
-        t = yf.Ticker(ticker)
-        info = t.fast_info
-        p = float(info.last_price) if hasattr(info, "last_price") and info.last_price is not None else None
-        if p is None:
-            hist = t.history(period="1d")
-            if not hist.empty: p = float(hist["Close"].iloc[-1])
-        if p is None or math.isnan(p): return None
-        return round(p, 6)
-    except Exception:
-        return None
-
-def require_token():
-    auth = request.headers.get("Authorization", "")
-    return auth.startswith("Bearer ") and auth.split(" ",1)[1].strip() == API_TOKEN
-
-@app.route("/api/auth/echo")
-def auth_echo():
-    return jsonify({"authorized": require_token()})
-
-@app.route("/api/watchlist", methods=["GET","POST"])
-def watchlist():
-    init_db()
-    if request.method == "GET":
-        with db_conn() as conn:
-            rows = conn.execute(
-                "SELECT id,symbol,symbol_norm,COALESCE(label,'') AS label "
-                "FROM watchlist WHERE user_id=0 ORDER BY id DESC"
-            ).fetchall()
-        return jsonify([dict(r) for r in rows])
-    if not require_token(): return jsonify({"error":"unauthorized"}), 401
-    data = request.get_json(silent=True) or {}
-    sym = (data.get("symbol") or "").strip()
-    label = (data.get("label") or "").strip()
-    if not sym: return jsonify({"error":"symbol required"}), 400
-    norm = normalize_symbol(sym); now_ts = int(datetime.utcnow().timestamp())
-    with db_conn() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO watchlist(user_id,symbol,symbol_norm,label,created_ts,updated_ts) "
-            "VALUES(0,?,?,?, ?,?)",(sym,norm,label,now_ts,now_ts)
-        )
-        conn.commit()
-        row = conn.execute(
-            "SELECT id,symbol,symbol_norm,COALESCE(label,'') AS label "
-            "FROM watchlist WHERE id=?", (cur.lastrowid,)
-        ).fetchone()
-    return jsonify(dict(row)), 201
-
-@app.route("/api/watchlist/<int:iid>", methods=["DELETE"])
-def watchlist_del(iid:int):
-    init_db()
-    if not require_token(): return jsonify({"error":"unauthorized"}), 401
-    with db_conn() as conn:
-        conn.execute("DELETE FROM watchlist WHERE id=? AND user_id=0", (iid,))
-        conn.commit()
-    return jsonify({"ok": True})
-
-@app.route("/api/alerts")
-def alerts_list():
-    init_db()
-    with db_conn() as conn:
-        rows = conn.execute(
-            "SELECT id,symbol,symbol_norm,COALESCE(name,'') AS name,COALESCE(cond,'') AS cond,"
-            "enabled,COALESCE(last_triggered_ts,0) AS last_triggered_ts "
-            "FROM alerts WHERE user_id=0 ORDER BY id DESC"
-        ).fetchall()
-    return jsonify([dict(r) for r in rows])
-
-# ----  Blueprint: /api/price  ----
-@api_bp.route("/price", methods=["GET"])
-def api_price():
-    sym = request.args.get("sym", "USD/TWD")
-    prices = {
-        "USD/TWD": 32.5,
-        "USD/JPY": 150.3,
-        "BTC/USD": 65000,
-        "2330.TW": 830
-    }
-    price = prices.get(sym.upper())
-    if price is None:
-        return jsonify({"error": f"Symbol '{sym}' not found"}), 404
-    return jsonify({
-        "symbol": sym,
-        "price": price,
-        "source": "demo data",
-        "timestamp": datetime.utcnow().isoformat()+"Z"
-    })
-
-# 把 blueprint 掛到 /api
-app.register_blueprint(api_bp, url_prefix="/api")
-
-# ----  /api/price：實際查價（避免與上面的 price_api 名稱衝突，函式改名）----
-@app.route("/api/price")
-def price_quote():
-    sym = (request.args.get("symbol") or "").strip()
-    if not sym: return jsonify({"error":"symbol required"}), 400
-    p = price_of(sym)
-    return jsonify({"symbol": sym, "price": p, "ok": p is not None})
-
-@app.route("/dashboard")
-def dashboard():
-    return send_from_directory(FRONTEND_DIR, "index.html")
-
-@app.route("/")
-def root():
-    return jsonify({
-        "name": f"FinBoard {VERSION}",
-        "dashboard": "/dashboard",
-        "auth":"set API_TOKEN env; send Bearer token for write ops."
-    })
+# -------- 首頁 & 健康檢查 --------
+@app.get("/")
+def index():
+    # 簡單 dashboard（可改成模板或前端靜態頁）
+    return (
+        f"<h1>FinBoard API</h1>"
+        f"<p>version: {VERSION}</p>"
+        f"<ul>"
+        f"<li>GET /health</li>"
+        f"<li>GET /api/price?symbol=USD/TWD</li>"
+        f"<li>GET /api/price?symbol=2330.TW</li>"
+        f"</ul>"
+    ), 200
 
 @app.get("/health")
 def health():
-    db_ok = True
-    try:
-        with db_conn() as conn:
-            conn.execute("SELECT 1")
-    except Exception:
-        db_ok = False
+    return jsonify(status="ok", version=VERSION, ts=now_iso_z()), 200
 
-    return jsonify({
-        "name": f"FinBoard {VERSION}",
-        "dashboard": "/dashboard",
-        "version": VERSION,
-        "db_ok": db_ok,
-        "auth": "set API_TOKEN env; send Bearer token for write ops"
-    })
+# -------- 新路由：/api/price --------
+@api_bp.get("/price")
+def get_price():
+    # 相容 sym → symbol（前端應統一傳 symbol）
+    symbol = request.args.get("symbol") or request.args.get("sym")
+    if not symbol:
+        return jsonify(error="missing 'symbol'"), 400
 
-# ----  /price_api：簡單 demo 端點（保留 price_api 名稱供你測）----
-@app.route("/price_api", methods=["GET"], strict_slashes=False)
-def price_api():
-    sym = request.args.get("sym", "USD/TWD")
-    prices = {
-        "USD/TWD": 32.5,
-        "USD/JPY": 150.3,
-        "BTC/USD": 65000,
-        "2330.TW": 830
-    }
-    price = prices.get(sym.upper(), None)
-    if price is None:
-        return jsonify({"error": f"Symbol '{sym}' not found"}), 404
-    return jsonify({
-        "symbol": sym,
-        "price": price,
-        "source": "demo data",
-        "timestamp": datetime.utcnow().isoformat() + "Z"
-    })
+    # 這裡先回 mock；之後可接 twbank / yfinance / cache
+    if "/" in symbol:
+        price = 32.45   # 外匯 mock
+        source = "mock:fx"
+    else:
+        price = 905.0   # 股票 mock
+        source = "mock:stock"
 
-# ----  啟動區塊：只保留一個  ----
+    return jsonify(
+        symbol=symbol,
+        price=price,
+        ts=now_iso_z(),
+        source=source,
+        version=VERSION,
+    ), 200
+
+# -------- 舊路由：/price_api（相容期導轉到新路徑）--------
+@app.get("/price_api")
+def legacy_price_api():
+    symbol = request.args.get("symbol") or request.args.get("sym")
+    # 永久導轉（觀察期可改 302）；也能在這裡直接 return get_price()
+    target = f"/api/price?symbol={symbol}" if symbol else "/api/price"
+    app.logger.info(f"[legacy] /price_api hit → redirect to {target}")
+    return redirect(target, code=301)
+
+# --------（預留）權限樣板：Bearer Token 驗證 --------
+def require_token():
+    """第4階段要用的簡易驗證；現在先不啟用。
+    將 REQUIRE_TOKEN 設為 '1' 才會強制檢查。
+    """
+    if os.getenv("REQUIRE_TOKEN") != "1":
+        return None  # 不檢查
+    auth = request.headers.get("Authorization", "")
+    prefix = "Bearer "
+    if not auth.startswith(prefix):
+        return jsonify(error="missing bearer token"), 401
+    token = auth[len(prefix):].strip()
+    # TODO: 驗證 token（查 DB / 比對簽章）
+    if token != os.getenv("API_TOKEN", "dev-token"):
+        return jsonify(error="invalid token"), 403
+    return None
+
+@api_bp.patch("/alerts/<int:alert_id>")
+def update_alert(alert_id):
+    # 範例：啟用時才驗證
+    err = require_token()
+    if err:
+        return err
+    payload = request.get_json(silent=True) or {}
+    # TODO: 真實更新邏輯
+    return jsonify(
+        ok=True, alert_id=alert_id, updated=payload, ts=now_iso_z(), version=VERSION
+    ), 200
+
+# -------- Blueprint 註冊 --------
+app.register_blueprint(api_bp, url_prefix="/api")
+
+# -------- 本地執行 --------
 if __name__ == "__main__":
-    init_db()
-    with db_conn() as conn:
-        if conn.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0] == 0:
-            now_ts = int(datetime.utcnow().timestamp())
-            demo = [
-                ("2330.TW","2330.TW","TSMC"),
-                ("USD/TWD","USDTWD=X","USD/TWD"),
-                ("BTC-USD","BTC-USD","Bitcoin"),
-                ("AAPL","AAPL","Apple")
-            ]
-            for s,n,lbl in demo:
-                conn.execute(
-                    "INSERT INTO watchlist(user_id,symbol,symbol_norm,label,created_ts,updated_ts) "
-                    "VALUES(0,?,?,?, ?,?)",(s,n,lbl,now_ts,now_ts)
-                )
-        if conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 0:
-            now_ts = int(datetime.utcnow().timestamp())
-            demo_a = [
-                ("USD/TWD","USDTWD=X","美元破位買進","price >= 33.0",1),
-                ("2330.TW","2330.TW","TSMC 買點","price <= 800",0)
-            ]
-            for s,norm,name,cond,en in demo_a:
-                conn.execute(
-                    "INSERT INTO alerts(user_id,symbol,symbol_norm,name,cond,enabled,created_ts,updated_ts) "
-                    "VALUES(0,?,?,?,?,?, ?,?)",(s,norm,name,cond,en,now_ts,now_ts)
-                )
-        conn.commit()
-
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=os.getenv("DEBUG", "0") == "1")
