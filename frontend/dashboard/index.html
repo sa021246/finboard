@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset='utf-8'/><meta name='viewport' content='width=device-width,initial-scale=1'/>
-<title>FinBoard v4.0-alpha.1</title>
+<title>FinBoard v4.0-alpha.2</title>
 <style>
 :root{--bg:#0b1020;--panel:#121933;--muted:#202a49;--text:#e9eefb;--sub:#a7b2d9;--acc:#7aa2ff}
 *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#0b1020,#0f1832);color:var(--text);font-family:system-ui,Segoe UI,Arial}
@@ -12,14 +12,25 @@ input,select{background:#0f1730;border:1px solid #22305f;color:var(--text);paddi
 .mono{font-family:ui-monospace,Consolas,Menlo,monospace}.muted{color:#a7b2d9}
 </style></head>
 <body><div class='wrap'>
-  <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px'>
-    <div><div style='font-size:20px;font-weight:800'>FinBoard · v4.0-alpha.1</div><div class='muted' style='font-size:12px'>寫入需 Token（Authorization: Bearer ...）</div></div>
-    <div style='display:flex;gap:8px;align-items:center'>
-      <input id='token' placeholder='Paste API Token e.g. DEMO-TOKEN' style='min-width:260px'/>
-      <button id='saveTok' class='btn'>Save</button>
-      <span class='pill'>Auth: <span id='auth' class='mono'>unknown</span></span>
-    </div>
+
+<!-- 放在 <div class='wrap'> 之後、任何使用 API 的 script 之前 -->
+<script>
+  window.FINBOARD_API_BASE = "https://finboard-ol3p.onrender.com";  /* 例： https://finboard.onrender.com */
+</script>
+
+
+  <!-- Token 輸入區：放在標題下面，Watchlist 之前 -->
+<div class="panel" style="margin-bottom:10px">
+  <div class="pt">API Access</div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span>Token</span>
+    <input id="token" placeholder="your-secret" style="min-width:260px"/>
+    <button id="saveTok" class="btn">Save</button>
+    <span>Auth: <span id="auth" class="mono muted">unknown</span></span>
   </div>
+</div>
+
+
 
   <div class='row'>
     <div class='panel'><div class='ph'><div class='pt'>Watchlist</div>
@@ -51,40 +62,100 @@ input,select{background:#0f1730;border:1px solid #22305f;color:var(--text);paddi
 </div>
 
 <script>
-const API = location.origin;
-const tokenEl = document.querySelector('#token'); const authEl = document.querySelector('#auth');
-const saveTok = document.querySelector('#saveTok');
-function getTok(){ return localStorage.getItem('fb_api_token') || ''; }
-function setTok(t){ localStorage.setItem('fb_api_token', t); tokenEl.value = t; }
-async function echo(){ const r = await fetch(API+'/api/auth/echo'); const j = await r.json(); authEl.textContent = j.authorized ? 'ok' : 'no token'; }
-setTok(getTok()); echo(); saveTok.addEventListener('click', echo);
+/* ① 用你在前面宣告的 Render 網域，而不是 location.origin */
+const API = window.FINBOARD_API_BASE;
 
+/* ② 與 API.js 對齊 localStorage 的 key，並在儲存時同步喚用 API.setToken */
+const tokenEl = document.querySelector('#token');
+const authEl  = document.querySelector('#auth');
+const saveTok = document.querySelector('#saveTok');
+function getTok(){ return localStorage.getItem('API_TOKEN') || ''; }
+function setTok(t){
+  localStorage.setItem('API_TOKEN', t);
+  tokenEl.value = t;
+  if (window.API && typeof API.setToken === 'function') API.setToken(t);
+}
+
+/* ③ token「回音」先用 /health 檢查服務可用（你後端目前沒有 /api/auth/echo） */
+async function echo(){
+  try {
+    const r = await fetch(API + '/health');
+    authEl.textContent = r.ok ? 'ok' : 'error';
+  } catch {
+    authEl.textContent = 'error';
+  }
+}
+setTok(getTok());
+echo();
+saveTok.addEventListener('click', ()=>{ setTok(tokenEl.value.trim()); echo(); });
+
+/* －－ 其餘你的功能維持不變（僅把 Bearer 來源改成 getTok()）－－ */
 function etoroUrl(s){ return 'https://www.etoro.com/markets/' + String(s).toLowerCase(); }
 async function jget(u){ const r=await fetch(u); return r.json(); }
-async function jpost(u,b){ const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+getTok()},body:JSON.stringify(b)}); return r.json(); }
-async function jdel(u){ const r=await fetch(u,{method:'DELETE',headers:{'Authorization':'Bearer '+getTok()}}); return r.json(); }
-async function jpatch(u,b){ const r=await fetch(u,{method:'PATCH',headers:{'Content-Type':'application/json','Authorization':'Bearer '+getTok()},body:JSON.stringify(b)}); return r.json(); }
+async function jpost(u,b){
+  const r=await fetch(u,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+getTok()},
+    body:JSON.stringify(b)
+  });
+  return r.json();
+}
+async function jdel(u){
+  const r=await fetch(u,{
+    method:'DELETE',
+    headers:{'Authorization':'Bearer '+getTok()}
+  });
+  return r.json();
+}
+async function jpatch(u,b){
+  const r=await fetch(u,{
+    method:'PATCH',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+getTok()},
+    body:JSON.stringify(b)
+  });
+  return r.json();
+}
 
-const wlT = document.querySelector('#wl tbody'); const wlIn = document.querySelector('#wl-in'); const wlAdd = document.querySelector('#wl-add');
-const alT = document.querySelector('#al tbody'); const sel = document.querySelector('#sel'); const ref = document.querySelector('#ref'); const priceEl = document.querySelector('#price'); const etoro = document.querySelector('#etoro');
+const wlT = document.querySelector('#wl tbody');
+const wlIn = document.querySelector('#wl-in');
+const wlAdd = document.querySelector('#wl-add');
+const alT  = document.querySelector('#al tbody');
+const sel  = document.querySelector('#sel');
+const ref  = document.querySelector('#ref');
+const priceEl = document.querySelector('#price');
+const etoro   = document.querySelector('#etoro');
 
 async function loadWL(){
-  const rows = await jget(API+'/api/watchlist'); wlT.innerHTML=''; sel.innerHTML='';
+  const rows = await jget(API+'/api/watchlist');
+  wlT.innerHTML=''; sel.innerHTML='';
   rows.forEach(r=>{
     const tr = document.createElement('tr');
     tr.innerHTML = '<td class="mono">'+r.symbol+'</td><td class="mono" id="p-'+r.id+'">-</td>'+
-                   '<td><button class="btn" data-id="'+r.id+'">Delete</button> <a class="btn primary" target="_blank" href="'+etoroUrl(r.symbol)+'">eToro</a></td>';
+                   '<td><button class="btn" data-id="'+r.id+'">Delete</button> '+
+                   '<a class="btn primary" target="_blank" href="'+etoroUrl(r.symbol)+'">eToro</a></td>';
     wlT.appendChild(tr);
     const o = document.createElement('option'); o.value=r.symbol; o.textContent=r.symbol; sel.appendChild(o);
-    jget(API+'/api/price?symbol='+encodeURIComponent(r.symbol)).then(pr=>{ document.querySelector('#p-'+r.id).textContent = pr.price ?? '-'; });
+    jget(API+'/api/price?symbol='+encodeURIComponent(r.symbol))
+      .then(pr=>{ document.querySelector('#p-'+r.id).textContent = pr.price ?? '-'; });
   });
   const qs = new URLSearchParams(location.search); const sym = qs.get('symbol'); if(sym) sel.value = sym;
 }
-wlAdd.addEventListener('click', async ()=>{ const s = wlIn.value.trim(); if(!s) return; const r=await jpost(API+'/api/watchlist',{symbol:s}); if(r.error){alert('Add failed: '+r.error);return;} wlIn.value=''; loadWL(); });
-wlT.addEventListener('click', async (e)=>{ const id=e.target?.dataset?.id; if(!id) return; const r=await jdel(API+'/api/watchlist/'+id); if(r.error){alert('Delete failed: '+r.error);return;} loadWL(); });
+wlAdd.addEventListener('click', async ()=>{
+  const s = wlIn.value.trim(); if(!s) return;
+  const r = await jpost(API+'/api/watchlist',{symbol:s});
+  if(r.error){ alert('Add failed: '+r.error); return; }
+  wlIn.value=''; loadWL();
+});
+wlT.addEventListener('click', async (e)=>{
+  const id=e.target?.dataset?.id; if(!id) return;
+  const r=await jdel(API+'/api/watchlist/'+id);
+  if(r.error){ alert('Delete failed: '+r.error); return; }
+  loadWL();
+});
 
 async function loadAL(){
-  const rows = await jget(API+'/api/alerts'); alT.innerHTML='';
+  const rows = await jget(API+'/api/alerts');
+  alT.innerHTML='';
   rows.forEach(r=>{
     const tr = document.createElement('tr');
     tr.innerHTML = '<td class="mono">'+r.id+'</td><td class="mono">'+r.symbol+'</td>'+
@@ -97,20 +168,26 @@ async function loadAL(){
 }
 alT.addEventListener('change', async (e)=>{
   const en = e.target?.dataset?.en, nm=e.target?.dataset?.name;
-  if(en){ const r=await jpatch(API+'/api/alerts/'+en,{enabled:e.target.checked}); if(r.error){alert('Update failed: '+r.error);} }
-  if(nm){ const r=await jpatch(API+'/api/alerts/'+nm,{name:e.target.value}); if(r.error){alert('Rename failed: '+r.error);} }
+  if(en){
+    const r=await jpatch(API+'/api/alerts/'+en,{enabled:e.target.checked});
+    if(r.error){ alert('Update failed: '+r.error); }
+  }
+  if(nm){
+    const r=await jpatch(API+'/api/alerts/'+nm,{name:e.target.value});
+    if(r.error){ alert('Rename failed: '+r.error); }
+  }
 });
 
-ref.addEventListener('click', async ()=>{ const s=sel.value; const pr=await jget(API+'/api/price?symbol='+encodeURIComponent(s)); priceEl.textContent = pr.price ?? '-'; etoro.href = etoroUrl(s); });
+ref.addEventListener('click', async ()=>{
+  const s=sel.value;
+  const pr=await jget(API+'/api/price?symbol='+encodeURIComponent(s));
+  priceEl.textContent = pr.price ?? '-';
+  etoro.href = etoroUrl(s);
+});
 
 loadWL(); loadAL(); setTimeout(()=>ref.click(),300);
-
-
 </script>
 
-<script>
-  window.FINBOARD_API_BASE = "https://finboard-ol3p.onrender.com";  /* 例： https://finboard.onrender.com */
-</script>
 
 
 <script src="js/API.js"></script>
@@ -122,3 +199,10 @@ loadWL(); loadAL(); setTimeout(()=>ref.click(),300);
 
 </body>
 </html>
+
+
+
+
+
+
+

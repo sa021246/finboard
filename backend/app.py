@@ -74,34 +74,36 @@ def legacy_price_api():
     app.logger.info(f"[legacy] /price_api hit → redirect to {target}")
     return redirect(target, code=301)
 
-# --------（預留）權限樣板：Bearer Token 驗證 --------
-def require_token():
-    """第4階段要用的簡易驗證；現在先不啟用。
-    將 REQUIRE_TOKEN 設為 '1' 才會強制檢查。
-    """
-    if os.getenv("REQUIRE_TOKEN") != "1":
-        return None  # 不檢查
-    auth = request.headers.get("Authorization", "")
-    prefix = "Bearer "
-    if not auth.startswith(prefix):
-        return jsonify(error="missing bearer token"), 401
-    token = auth[len(prefix):].strip()
-    # TODO: 驗證 token（查 DB / 比對簽章）
-    if token != os.getenv("API_TOKEN", "dev-token"):
-        return jsonify(error="invalid token"), 403
-    return None
+# -------- Bearer Token 驗證（正式版）--------
+REQUIRE_TOKEN = os.getenv("REQUIRE_TOKEN", "0").lower() in ("1", "true", "yes")
+API_TOKEN     = os.getenv("API_TOKEN", "")
+
+def require_auth(fn):
+    from functools import wraps
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not REQUIRE_TOKEN:
+            return fn(*args, **kwargs)
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify(error="missing bearer token"), 401
+        token = auth.split(" ", 1)[1].strip()
+        if token != API_TOKEN:
+            return jsonify(error="invalid token"), 403
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+
 
 @api_bp.patch("/alerts/<int:alert_id>")
+@require_auth
 def update_alert(alert_id):
-    # 範例：啟用時才驗證
-    err = require_token()
-    if err:
-        return err
     payload = request.get_json(silent=True) or {}
-    # TODO: 真實更新邏輯
     return jsonify(
         ok=True, alert_id=alert_id, updated=payload, ts=now_iso_z(), version=VERSION
     ), 200
+
 
 # -------- Blueprint 註冊 --------
 app.register_blueprint(api_bp, url_prefix="/api")
