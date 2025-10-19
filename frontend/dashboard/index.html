@@ -12,11 +12,14 @@ input,select{background:#0f1730;border:1px solid #22305f;color:var(--text);paddi
 .mono{font-family:ui-monospace,Consolas,Menlo,monospace}.muted{color:#a7b2d9}
 </style></head>
 <body><div class='wrap'>
-
+<!-- 這裡通常有標題：FinBoard v4.0-alpha.2 ... -->
 <!-- 放在 <div class='wrap'> 之後、任何使用 API 的 script 之前 -->
 <script>
+  // 指向 Render 的 Flask 網域
   window.FINBOARD_API_BASE = "https://finboard-ol3p.onrender.com";  /* 例： https://finboard.onrender.com */
 </script>
+
+<script src="js/API.js"></script>
 
 
   <!-- Token 輸入區：放在標題下面，Watchlist 之前 -->
@@ -63,7 +66,7 @@ input,select{background:#0f1730;border:1px solid #22305f;color:var(--text);paddi
 
 <script>
 /* ① 用你在前面宣告的 Render 網域，而不是 location.origin */
-const API = window.FINBOARD_API_BASE;
+const API_BASE = window.FINBOARD_API_BASE;
 
 /* ② 與 API.js 對齊 localStorage 的 key，並在儲存時同步喚用 API.setToken */
 const tokenEl = document.querySelector('#token');
@@ -76,11 +79,12 @@ function setTok(t){
   if (window.API && typeof API.setToken === 'function') API.setToken(t);
 }
 
-/* ③ token「回音」先用 /health 檢查服務可用（你後端目前沒有 /api/auth/echo） */
+/* ③ token「回音」請改呼叫 /api/auth/echo（你後端已經實作） */
 async function echo(){
   try {
-    const r = await fetch(API + '/health');
-    authEl.textContent = r.ok ? 'ok' : 'error';
+    const r = await fetch(API_BASE + '/api/auth/echo', { headers: { Authorization: 'Bearer '+getTok() }});
+    const j = await r.json();
+    authEl.textContent = j.authorized ? 'ok' : 'error';
   } catch {
     authEl.textContent = 'error';
   }
@@ -89,9 +93,7 @@ setTok(getTok());
 echo();
 saveTok.addEventListener('click', ()=>{ setTok(tokenEl.value.trim()); echo(); });
 
-/* －－ 其餘你的功能維持不變（僅把 Bearer 來源改成 getTok()）－－ */
-function etoroUrl(s){ return 'https://www.etoro.com/markets/' + String(s).toLowerCase(); }
-async function jget(u){ const r=await fetch(u); return r.json(); }
+/* －－ 其餘功能把 API 換成 API_BASE －－ */
 async function jpost(u,b){
   const r=await fetch(u,{
     method:'POST',
@@ -100,102 +102,19 @@ async function jpost(u,b){
   });
   return r.json();
 }
-async function jdel(u){
-  const r=await fetch(u,{
-    method:'DELETE',
-    headers:{'Authorization':'Bearer '+getTok()}
-  });
-  return r.json();
-}
-async function jpatch(u,b){
-  const r=await fetch(u,{
-    method:'PATCH',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+getTok()},
-    body:JSON.stringify(b)
-  });
-  return r.json();
-}
-
-const wlT = document.querySelector('#wl tbody');
-const wlIn = document.querySelector('#wl-in');
-const wlAdd = document.querySelector('#wl-add');
-const alT  = document.querySelector('#al tbody');
-const sel  = document.querySelector('#sel');
-const ref  = document.querySelector('#ref');
-const priceEl = document.querySelector('#price');
-const etoro   = document.querySelector('#etoro');
-
+…
 async function loadWL(){
-  const rows = await jget(API+'/api/watchlist');
-  wlT.innerHTML=''; sel.innerHTML='';
-  rows.forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td class="mono">'+r.symbol+'</td><td class="mono" id="p-'+r.id+'">-</td>'+
-                   '<td><button class="btn" data-id="'+r.id+'">Delete</button> '+
-                   '<a class="btn primary" target="_blank" href="'+etoroUrl(r.symbol)+'">eToro</a></td>';
-    wlT.appendChild(tr);
-    const o = document.createElement('option'); o.value=r.symbol; o.textContent=r.symbol; sel.appendChild(o);
-    jget(API+'/api/price?symbol='+encodeURIComponent(r.symbol))
-      .then(pr=>{ document.querySelector('#p-'+r.id).textContent = pr.price ?? '-'; });
-  });
-  const qs = new URLSearchParams(location.search); const sym = qs.get('symbol'); if(sym) sel.value = sym;
+  const rows = await jget(API_BASE+'/api/watchlist');   // ← 改這裡
+  …
+  jget(API_BASE+'/api/price?symbol='+encodeURIComponent(r.symbol)) // ← 這裡也要改
+  …
 }
-wlAdd.addEventListener('click', async ()=>{
-  const s = wlIn.value.trim(); if(!s) return;
-  const r = await jpost(API+'/api/watchlist',{symbol:s});
-  if(r.error){ alert('Add failed: '+r.error); return; }
-  wlIn.value=''; loadWL();
-});
-wlT.addEventListener('click', async (e)=>{
-  const id=e.target?.dataset?.id; if(!id) return;
-  const r=await jdel(API+'/api/watchlist/'+id);
-  if(r.error){ alert('Delete failed: '+r.error); return; }
-  loadWL();
-});
-
-async function loadAL(){
-  const rows = await jget(API+'/api/alerts');
-  alT.innerHTML='';
-  rows.forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td class="mono">'+r.id+'</td><td class="mono">'+r.symbol+'</td>'+
-                   '<td><span class="mono">'+(r.cond||'')+'</span></td>'+
-                   '<td><input value="'+(r.name||'')+'" data-name="'+r.id+'" style="width:140px"/></td>'+
-                   '<td><label><input type="checkbox" '+(r.enabled?'checked':'')+' data-en="'+r.id+'"/> Enabled</label></td>'+
-                   '<td><a class="btn primary" target="_blank" href="'+etoroUrl(r.symbol)+'">eToro</a></td>';
-    alT.appendChild(tr);
-  });
-}
-alT.addEventListener('change', async (e)=>{
-  const en = e.target?.dataset?.en, nm=e.target?.dataset?.name;
-  if(en){
-    const r=await jpatch(API+'/api/alerts/'+en,{enabled:e.target.checked});
-    if(r.error){ alert('Update failed: '+r.error); }
-  }
-  if(nm){
-    const r=await jpatch(API+'/api/alerts/'+nm,{name:e.target.value});
-    if(r.error){ alert('Rename failed: '+r.error); }
-  }
-});
-
-ref.addEventListener('click', async ()=>{
-  const s=sel.value;
-  const pr=await jget(API+'/api/price?symbol='+encodeURIComponent(s));
-  priceEl.textContent = pr.price ?? '-';
-  etoro.href = etoroUrl(s);
-});
-
-loadWL(); loadAL(); setTimeout(()=>ref.click(),300);
+…
+const pr=await jget(API_BASE+'/api/price?symbol='+encodeURIComponent(s)); // ← 亦同
+…
 </script>
 
 
-
-<script src="js/API.js"></script>
-<script>
-  API.getPrice("USD/TWD")
-    .then(data => console.log("💱 匯率資料:", data))
-    .catch(err => console.error("❌ 錯誤:", err));
-</script>
 
 </body>
 </html>
