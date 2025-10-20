@@ -100,22 +100,6 @@ def require_auth(fn):
     return wrapper
 
 
-@api_bp.get("/auth/echo")
-def auth_echo():
-    # 判斷是否帶對的 Bearer Token；同時考慮是否有開啟強制驗證
-    auth = request.headers.get("Authorization", "")
-    token = ""
-    if auth.startswith("Bearer "):
-        token = auth.split(" ", 1)[1].strip()
-
-    authorized = (not REQUIRE_TOKEN) or (token == API_TOKEN)
-
-    return jsonify(
-        authorized=authorized,
-        ts=now_iso_z(),
-        version=VERSION,
-    ), 200
-
 
 
 @api_bp.patch("/alerts/<int:alert_id>")
@@ -126,22 +110,17 @@ def update_alert(alert_id):
         ok=True, alert_id=alert_id, updated=payload, ts=now_iso_z(), version=VERSION
     ), 200
 
-# ---- 驗證回聲（前端 Save 後用來顯示 Auth: ok/error）----
+
+
+# ---- Auth Echo ----
 @api_bp.get("/auth/echo")
 def auth_echo():
     auth = request.headers.get("Authorization", "")
-    token = ""
-    if auth.startswith("Bearer "):
-        token = auth.split(" ", 1)[1].strip()
-
-    # REQUIRE_TOKEN=0 時即使沒帶 token 也視為 authorized
+    token = auth.split(" ", 1)[1].strip() if auth.startswith("Bearer ") else ""
     authorized = (not REQUIRE_TOKEN) or (token == API_TOKEN)
+    return jsonify(authorized=authorized, version=VERSION, ts=now_iso_z()), 200
 
-    return jsonify(
-        authorized=authorized,
-        ts=now_iso_z(),
-        version=VERSION,
-    ), 200
+
 
 
 # ---- Watchlist（暫時 mock，之後可接資料庫）----
@@ -162,19 +141,7 @@ def get_alerts():
     ]), 200
 
 
-@api_bp.get("/watchlist")
-def get_watchlist():
-    return jsonify([
-        {"id": 1, "symbol": "USD/TWD"},
-        {"id": 2, "symbol": "2330.TW"},
-    ]), 200
 
-@api_bp.get("/alerts")
-def get_alerts():
-    return jsonify([
-        {"id": 1, "symbol": "USD/TWD", "cond": ">", "name": "FX Alert",   "enabled": True},
-        {"id": 2, "symbol": "2330.TW",  "cond": "<", "name": "Stock Alert","enabled": False},
-    ]), 200
 
 
 
