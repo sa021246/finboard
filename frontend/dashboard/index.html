@@ -1,124 +1,274 @@
 <!doctype html>
-<html><head><meta charset='utf-8'/><meta name='viewport' content='width=device-width,initial-scale=1'/>
-<title>FinBoard v4.0-alpha.2</title>
-<style>
-:root{--bg:#0b1020;--panel:#121933;--muted:#202a49;--text:#e9eefb;--sub:#a7b2d9;--acc:#7aa2ff}
-*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#0b1020,#0f1832);color:var(--text);font-family:system-ui,Segoe UI,Arial}
-.wrap{max-width:1200px;margin:24px auto;padding:0 16px}.row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-.panel{background:var(--panel);border:1px solid #1b2342;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.25)}.ph{padding:12px 16px;border-bottom:1px solid var(--muted);display:flex;justify-content:space-between;align-items:center}
-.pt{font-weight:800}.pc{padding:16px}.btn{background:var(--muted);color:var(--text);border:none;border-radius:10px;padding:8px 12px;cursor:pointer}.btn.primary{background:var(--acc)}
-table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #1b2547;padding:10px 8px;text-align:left;font-size:14px}
-input,select{background:#0f1730;border:1px solid #22305f;color:var(--text);padding:8px;border-radius:10px}.pill{border:1px solid #2a3c7c;padding:2px 8px;border-radius:999px;font-size:12px;display:inline-flex;gap:6px;align-items:center}
-.mono{font-family:ui-monospace,Consolas,Menlo,monospace}.muted{color:#a7b2d9}
-</style></head>
-<body><div class='wrap'>
-<!-- 這裡通常有標題：FinBoard v4.0-alpha.2 ... -->
-<!-- 放在 <div class='wrap'> 之後、任何使用 API 的 script 之前 -->
-<script>
-  // 指向 Render 的 Flask 網域
-  window.FINBOARD_API_BASE = "https://finboard-ol3p.onrender.com";  /* 例： https://finboard.onrender.com */
-</script>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>FinBoard v4.0-alpha.2</title>
+  <style>
+    :root{--bg:#0b1020;--panel:#121933;--muted:#202a49;--text:#e9eefb;--sub:#a7b2d9;--acc:#7aa2ff}
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0b1020,#0f1832);color:var(--text);font-family:system-ui,Segoe UI,Arial}
+    .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+    .panel{background:var(--panel);border:1px solid #1b2342;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .ph{padding:12px 16px;border-bottom:1px solid var(--muted);display:flex;justify-content:space-between;align-items:center}
+    .pt{font-weight:800}
+    .pc{padding:16px}
+    .btn{background:var(--muted);color:var(--text);border:none;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn.primary{background:var(--acc)}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #1b2547;padding:10px 8px;text-align:left;font-size:14px}
+    input,select{background:#0f1730;border:1px solid #22305f;color:var(--text);padding:8px;border-radius:10px}
+    .pill{border:1px solid #2a3c7c;padding:2px 8px;border-radius:999px;font-size:12px;display:inline-flex;gap:6px;align-items:center}
+    .mono{font-family:ui-monospace,Consolas,Menlo,monospace}
+    .muted{color:#a7b2d9}
+    a.btn{display:inline-block;text-decoration:none}
+  </style>
 
-<script src="js/API.js"></script>
+  <!-- 重要：先宣告後端 API 網域，再載入 / 寫任何使用 API 的 script -->
+  <script>
+    window.FINBOARD_API_BASE = "https://finboard-ol3p.onrender.com"; /* 例： https://finboard.onrender.com */
+  </script>
+</head>
+<body>
+<div class="wrap">
 
-
-  <!-- Token 輸入區：放在標題下面，Watchlist 之前 -->
-<div class="panel" style="margin-bottom:10px">
-  <div class="pt">API Access</div>
-  <div style="display:flex;align-items:center;gap:8px">
-    <span>Token</span>
-    <input id="token" placeholder="your-secret" style="min-width:260px"/>
-    <button id="saveTok" class="btn">Save</button>
-    <span>Auth: <span id="auth" class="mono muted">unknown</span></span>
-  </div>
-</div>
-
-
-
-  <div class='row'>
-    <div class='panel'><div class='ph'><div class='pt'>Watchlist</div>
-      <div style='display:grid;grid-template-columns:1fr auto;gap:8px'><input id='wl-in' placeholder='Add symbol e.g. 2330.TW / USD/TWD'/><button id='wl-add' class='btn'>Add</button></div>
-    </div><div class='pc'><table id='wl'><thead><tr><th>Symbol</th><th>Price</th><th></th></tr></thead><tbody></tbody></table></div></div>
-
-    <div class='panel'><div class='ph'><div class='pt'>Alerts</div></div>
-      <div class='pc'><table id='al'><thead><tr><th>#</th><th>Symbol</th><th>Cond</th><th>Name</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
-      <div class='muted' style='font-size:12px;margin-top:6px'>* 先支援 enable/name 修改；新增/刪除請用 Telegram Bot。</div></div>
+  <!-- Token 區（標題下、所有會打 API 的程式碼之前） -->
+  <div class="panel" style="margin-bottom:10px">
+    <div class="pt">API Access</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span>Token</span>
+      <input id="token" placeholder="your-secret" style="min-width:260px"/>
+      <button id="saveTok" class="btn">Save</button>
+      <span>Auth: <span id="auth" class="mono muted">unknown</span></span>
     </div>
   </div>
 
-  <div class='row'>
-    <div class='panel'><div class='ph'><div class='pt'>Trend</div></div>
-      <div class='pc'>
-        <div style='display:flex;gap:8px;align-items:center;margin-bottom:8px'>
-          <select id='sel'></select><button id='ref' class='btn'>Refresh Price</button>
-          <span class='pill'>Price: <span id='price' class='mono'>-</span></span>
-          <a id='etoro' class='btn primary' target='_blank' href='#'>Open in eToro</a>
+  <div class="row">
+    <div class="panel">
+      <div class="ph">
+        <div class="pt">Watchlist</div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px">
+          <input id="wl-in" placeholder="Add symbol e.g. 2330.TW / USD/TWD"/>
+          <button id="wl-add" class="btn">Add</button>
         </div>
-        <div class='muted'>alpha：先顯示當前價；後續接折線圖</div>
+      </div>
+      <div class="pc">
+        <table id="wl">
+          <thead><tr><th>Symbol</th><th>Price</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
-    <div class='panel'><div class='ph'><div class='pt'>Notes / Summary</div></div>
-      <div class='pc'><textarea style='width:100%;min-height:180px;background:#0f1730;color:#e9eefb;border:1px solid #22305f;border-radius:12px;padding:10px' placeholder='今天的觀察、策略、待辦…'></textarea>
-      <div style='text-align:right;margin-top:8px'><button class='btn'>Save (local)</button></div></div>
+
+    <div class="panel">
+      <div class="ph"><div class="pt">Alerts</div></div>
+      <div class="pc">
+        <table id="al">
+          <thead><tr><th>#</th><th>Symbol</th><th>Cond</th><th>Name</th><th>Status</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="muted" style="font-size:12px;margin-top:6px">
+          * 先支援 enable/name 修改；新增/刪除請用 Telegram Bot。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="panel">
+      <div class="ph"><div class="pt">Trend</div></div>
+      <div class="pc">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <select id="sel"></select>
+          <button id="ref" class="btn">Refresh Price</button>
+          <span class="pill">Price: <span id="price" class="mono">-</span></span>
+          <a id="etoro" class="btn primary" target="_blank" href="#">Open in eToro</a>
+        </div>
+        <div class="muted">alpha：先顯示當前價；後續接折線圖</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="ph"><div class="pt">Notes / Summary</div></div>
+      <div class="pc">
+        <textarea id="notes" style="width:100%;min-height:180px;background:#0f1730;color:#e9eefb;border:1px solid #22305f;border-radius:12px;padding:10px" placeholder="今天的觀察、策略、待辦…"></textarea>
+        <div style="text-align:right;margin-top:8px"><button class="btn" id="saveNote">Save (local)</button></div>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
-/* ① 用你在前面宣告的 Render 網域，而不是 location.origin */
-const API_BASE = window.FINBOARD_API_BASE;
+/* ===== 基本設定／工具 ===== */
+const API_BASE = window.FINBOARD_API_BASE || location.origin;
+const LS_TOKEN_KEY = 'fb_api_token';
 
-/* ② 與 API.js 對齊 localStorage 的 key，並在儲存時同步喚用 API.setToken */
 const tokenEl = document.querySelector('#token');
 const authEl  = document.querySelector('#auth');
 const saveTok = document.querySelector('#saveTok');
-function getTok(){ return localStorage.getItem('API_TOKEN') || ''; }
-function setTok(t){
-  localStorage.setItem('API_TOKEN', t);
-  tokenEl.value = t;
-  if (window.API && typeof API.setToken === 'function') API.setToken(t);
+
+function getTok(){ return localStorage.getItem(LS_TOKEN_KEY) || ''; }
+function setTok(t){ localStorage.setItem(LS_TOKEN_KEY, t); tokenEl.value = t; }
+
+function authHeaders(extra = {}) {
+  const h = { ...extra };
+  const t = getTok();
+  if (t) h['Authorization'] = 'Bearer ' + t;
+  return h;
 }
 
-/* ③ token「回音」請改呼叫 /api/auth/echo（你後端已經實作） */
-async function echo(){
-  try {
-    const r = await fetch(API_BASE + '/api/auth/echo', { headers: { Authorization: 'Bearer '+getTok() }});
-    const j = await r.json();
-    authEl.textContent = j.authorized ? 'ok' : 'error';
-  } catch {
-    authEl.textContent = 'error';
-  }
+async function jget(u) {
+  const r = await fetch(u, { headers: authHeaders() });
+  return r.json();
 }
-setTok(getTok());
-echo();
-saveTok.addEventListener('click', ()=>{ setTok(tokenEl.value.trim()); echo(); });
-
-/* －－ 其餘功能把 API 換成 API_BASE －－ */
-async function jpost(u,b){
-  const r=await fetch(u,{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+getTok()},
-    body:JSON.stringify(b)
+async function jpost(u, b) {
+  const r = await fetch(u, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(b)
   });
   return r.json();
 }
-…
-async function loadWL(){
-  const rows = await jget(API_BASE+'/api/watchlist');   // ← 改這裡
-  …
-  jget(API_BASE+'/api/price?symbol='+encodeURIComponent(r.symbol)) // ← 這裡也要改
-  …
+async function jdel(u) {
+  const r = await fetch(u, { method: 'DELETE', headers: authHeaders() });
+  return r.json();
 }
-…
-const pr=await jget(API_BASE+'/api/price?symbol='+encodeURIComponent(s)); // ← 亦同
-…
+async function jpatch(u, b) {
+  const r = await fetch(u, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(b)
+  });
+  return r.json();
+}
+
+/* ===== 驗證狀態回報 ===== */
+async function echoAuth(){
+  try {
+    const r = await fetch(`${API_BASE}/api/auth/echo`, { headers: authHeaders() });
+    const j = await r.json();
+    authEl.textContent = j.authorized ? 'ok' : 'no token';
+    authEl.classList.toggle('muted', !j.authorized);
+  } catch (e) {
+    authEl.textContent = 'error';
+    console.error('echo error', e);
+  }
+}
+setTok(getTok());
+echoAuth();
+saveTok.addEventListener('click', () => { setTok(tokenEl.value.trim()); echoAuth(); });
+
+/* ===== Watchlist ===== */
+const wlT  = document.querySelector('#wl tbody');
+const wlIn = document.querySelector('#wl-in');
+const wlAdd= document.querySelector('#wl-add');
+
+function etoroUrl(s){ return 'https://www.etoro.com/markets/' + String(s).toLowerCase(); }
+
+async function loadWatchlist(){
+  const rows = await jget(`${API_BASE}/api/watchlist`);
+  wlT.innerHTML = '';
+  sel.innerHTML  = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${r.symbol}</td>
+      <td class="mono" id="p-${r.id}">-</td>
+      <td>
+        <button class="btn" data-id="${r.id}">Delete</button>
+        <a class="btn primary" target="_blank" href="${etoroUrl(r.symbol)}">eToro</a>
+      </td>`;
+    wlT.appendChild(tr);
+
+    const opt = document.createElement('option');
+    opt.value = r.symbol; opt.textContent = r.symbol;
+    sel.appendChild(opt);
+
+    jget(`${API_BASE}/api/price?symbol=${encodeURIComponent(r.symbol)}`)
+      .then(pr => { const td = document.querySelector(`#p-${r.id}`); if (td) td.textContent = pr.price ?? '-'; });
+  });
+}
+wlAdd.addEventListener('click', async () => {
+  const s = wlIn.value.trim(); if (!s) return;
+  const r = await jpost(`${API_BASE}/api/watchlist`, { symbol: s });
+  if (r.error) return alert('Add failed: ' + r.error);
+  wlIn.value = ''; loadWatchlist();
+});
+wlT.addEventListener('click', async (e) => {
+  const id = e.target?.dataset?.id; if (!id) return;
+  const r = await jdel(`${API_BASE}/api/watchlist/${id}`);
+  if (r.error) return alert('Delete failed: ' + r.error);
+  loadWatchlist();
+});
+
+/* ===== Alerts ===== */
+const alT = document.querySelector('#al tbody');
+async function loadAlerts(){
+  const rows = await jget(`${API_BASE}/api/alerts`);
+  alT.innerHTML = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${r.id}</td>
+      <td class="mono">${r.symbol}</td>
+      <td><span class="mono">${r.cond || ''}</span></td>
+      <td><input value="${r.name || ''}" data-name="${r.id}" style="width:140px"/></td>
+      <td><label><input type="checkbox" ${r.enabled?'checked':''} data-en="${r.id}"/> Enabled</label></td>
+      <td><a class="btn primary" target="_blank" href="${etoroUrl(r.symbol)}">eToro</a></td>`;
+    alT.appendChild(tr);
+  });
+}
+alT.addEventListener('change', async (e) => {
+  const en = e.target?.dataset?.en;
+  const nm = e.target?.dataset?.name;
+  if (en){
+    const r = await jpatch(`${API_BASE}/api/alerts/${en}`, { enabled: e.target.checked });
+    if (r.error) alert('Update failed: ' + r.error);
+  }
+  if (nm){
+    const r = await jpatch(`${API_BASE}/api/alerts/${nm}`, { name: e.target.value });
+    if (r.error) alert('Rename failed: ' + r.error);
+  }
+});
+
+/* ===== Trend / Price ===== */
+const sel     = document.querySelector('#sel');
+const refBtn  = document.querySelector('#ref');
+const priceEl = document.querySelector('#price');
+const etoro   = document.querySelector('#etoro');
+
+refBtn.addEventListener('click', async () => {
+  const s  = sel.value;
+  const pr = await jget(`${API_BASE}/api/price?symbol=${encodeURIComponent(s)}`);
+  priceEl.textContent = pr.price ?? '-';
+  etoro.href = etoroUrl(s);
+});
+
+/* ===== Notes：純本地 ===== */
+const noteEl  = document.querySelector('#notes');
+document.querySelector('#saveNote').addEventListener('click', ()=>{
+  localStorage.setItem('finboard_notes', noteEl.value || '');
+  alert('saved locally');
+});
+noteEl.value = localStorage.getItem('finboard_notes') || '';
+
+/* ===== 首次載入 ===== */
+(async function init(){
+  await loadWatchlist();
+  await loadAlerts();
+
+  // 若 URL ?symbol=XXX 帶入，預設選定；否則保留第一個
+  const qs  = new URLSearchParams(location.search);
+  const sym = qs.get('symbol');
+  if (sym) sel.value = sym;
+
+  // 初次自動刷新一次價格
+  setTimeout(() => refBtn.click(), 300);
+})();
 </script>
-
-
-
 </body>
 </html>
-
 
 
 
