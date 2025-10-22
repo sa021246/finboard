@@ -25,12 +25,14 @@
     a.btn{display:inline-block;text-decoration:none}
   </style>
 
-  <!-- 重要：先宣告後端 API 網域，再載入 / 寫任何使用 API 的 script -->
-  <script>
-    window.FINBOARD_API_BASE = "https://finboard-ol3p.onrender.com"; /* 例： https://finboard.onrender.com */
-  </script>
+<!-- 重要：先定義 API 基底，然後再載入 API 的 script -->
+<script>
+  window.FINBOARD_API_BASE = "https://finboard-ol3p.onrender.com";
+</script>
+<script src="js/API.js"></script>
 
-window.FINBOARD_API_BASE =
+
+
 
 </head>
 <body>

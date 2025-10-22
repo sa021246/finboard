@@ -19,7 +19,7 @@ CORS(
     app,
     resources={r"/api/*": {"origins": "*"}},
     allow_headers=["Authorization", "Content-Type"],
-    methods=["GET", "POST", "PATCH", "DELETE"],
+    methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
 )
 
 
