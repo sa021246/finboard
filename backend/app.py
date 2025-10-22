@@ -10,6 +10,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 load_dotenv()
 
+from functools import wraps
 
 # -------- 基本設定 --------
 app = Flask(__name__)
@@ -85,19 +86,25 @@ REQUIRE_TOKEN = os.getenv("REQUIRE_TOKEN", "0").lower() in ("1", "true", "yes")
 API_TOKEN     = os.getenv("API_TOKEN", "")
 
 def require_auth(fn):
-    from functools import wraps
     @wraps(fn)
     def wrapper(*args, **kwargs):
+        # 讓 CORS 預檢通過
+        if request.method == "OPTIONS":
+            return ("", 204)
+
         if not REQUIRE_TOKEN:
             return fn(*args, **kwargs)
+
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             return jsonify(error="missing bearer token"), 401
         token = auth.split(" ", 1)[1].strip()
         if token != API_TOKEN:
             return jsonify(error="invalid token"), 403
+
         return fn(*args, **kwargs)
     return wrapper
+
 
 
 
@@ -141,7 +148,14 @@ def get_alerts():
     ]), 200
 
 
-
+# CORS for all /api/* routes
+CORS(
+    app,
+    resources={r"/api/*": {"origins": "*"}},
+    supports_credentials=False,
+    allow_headers=["Authorization", "Content-Type"],
+    methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+)
 
 
 
