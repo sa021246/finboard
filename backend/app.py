@@ -94,7 +94,8 @@ def require_auth(fn):
 
         if not REQUIRE_TOKEN:
             return fn(*args, **kwargs)
-
+        
+        # ✅ 驗證 Bearer Token
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             return jsonify(error="missing bearer token"), 401
