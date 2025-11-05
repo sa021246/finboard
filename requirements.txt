@@ -1,5 +1,6 @@
 Flask==3.0.2
 flask-cors==4.0.0
+Flask-JWT-Extended
 yfinance==0.2.52
 pandas>=2.0.0
 numpy>=1.26.0
