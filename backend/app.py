@@ -291,37 +291,48 @@ def api_login():
 # ==== Auth: status / upgrade / check ====
 from flask import g
 
+from flask import request, jsonify
+import jwt
+from datetime import datetime
+
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")  # 你原本怎麼寫就用原本的
+
 def _decode_token_and_get_user():
-    """讀取 Authorization: Bearer <jwt>，回傳 (user, error_response_or_None)"""
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
+    """從 Authorization Header 把 Bearer token 拿出來並解碼，回傳 (user, err_response)"""
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header:
+        return None, (jsonify({"error": "missing Authorization header"}), 401)
+
+    # 支援兩種寫法：
+    # Authorization: Bearer xxx
+    # Authorization: xxx
+    if auth_header.startswith("Bearer "):
+        token = auth_header[len("Bearer "):].strip()
+    else:
+        token = auth_header.strip()
+
+    if not token:
         return None, (jsonify({"error": "missing token"}), 401)
-    token = auth.split(" ", 1)[1].strip()
+
     try:
-        payload = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         return None, (jsonify({"error": "token expired"}), 401)
-    except Exception:
+    except jwt.InvalidTokenError:
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 讀使用者
-    conn = get_db()
-    cur = conn.execute("SELECT * FROM users WHERE id = ?", (payload["user_id"],))
-    user = cur.fetchone()
-    conn.close()
+    # 這裡依照你之前 login 發 token 的內容來取 user
+    # 如果 payload 裡有 username 就這樣：
+    username = payload.get("username")
+    if not username:
+        return None, (jsonify({"error": "invalid token payload"}), 401)
+
+    # 這裡改成你實際的「查 user」邏輯
+    user = get_user_by_username(username)  # <-- 用你自己的 function
     if not user:
         return None, (jsonify({"error": "user not found"}), 404)
 
-    # 檢查授權到期（有設定才檢查）
-    if user["expire_at"]:
-        try:
-            if datetime.fromisoformat(user["expire_at"]) < datetime.utcnow():
-                return None, (jsonify({"error": "subscription expired", "need_renew": True}), 403)
-        except Exception:
-            # 格式壞掉就先當成未過期不擋，避免把人鎖死
-            pass
-
-    g.current_user = user
     return user, None
 
 
