@@ -305,30 +305,44 @@ JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")  # 例如這樣，照你實�
 
 
 def _decode_token_and_get_user():
-    """解析 JWT，並從 DB 取得使用者資料"""
+    """
+    從 Authorization: Bearer <JWT> 解析出 username，
+    再到 SQLite 的 users table 撈出使用者資料。
+    """
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return None, (jsonify({"error": "missing token"}), 401)
 
-    token = auth_header.split(" ", 1)[1]
+    token = auth_header.split(" ", 1)[1].strip()
 
     try:
-        data = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        # 用和 create_access_token 一樣的 secret 解碼
+        data = jwt.decode(
+            token,
+            current_app.config["JWT_SECRET_KEY"],
+            algorithms=["HS256"],
+        )
     except jwt.ExpiredSignatureError:
         return None, (jsonify({"error": "token expired"}), 401)
-    except Exception:
+    except Exception as e:
+        current_app.logger.exception("JWT decode failed: %s", e)
         return None, (jsonify({"error": "invalid token"}), 401)
 
     username = data.get("username")
     if not username:
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 在 JSON DB 中找使用者
-    user = db["users"].get(username)
+    # ✅ 改成從 SQLite 抓使用者
+    conn = get_db()
+    cur = conn.execute("SELECT * FROM users WHERE username = ?", (username,))
+    user = cur.fetchone()
+    conn.close()
+
     if not user:
         return None, (jsonify({"error": "user not found"}), 404)
 
     return user, None
+
 
 
 
