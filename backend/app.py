@@ -4,7 +4,7 @@
 # app.py
 import os
 from datetime import datetime, timezone, timedelta
-from flask import Flask, Blueprint, jsonify, request, redirect
+from flask import Flask, Blueprint, jsonify, request, redirect, current_app
 from flask_cors import CORS
 
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity
@@ -20,7 +20,6 @@ from datetime import datetime, timedelta
 
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
-
 
 # -------- 基本設定 --------
 app = Flask(__name__)
@@ -297,41 +296,53 @@ from datetime import datetime
 
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")  # 你原本怎麼寫就用原本的
 
+
 def _decode_token_and_get_user():
-    """從 Authorization Header 把 Bearer token 拿出來並解碼，回傳 (user, err_response)"""
+    """
+    從 Authorization: Bearer <token> 讀取 JWT，
+    解碼後找出 user，回傳 (user, None) 或 (None, (response, status))
+    """
 
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header:
-        return None, (jsonify({"error": "missing Authorization header"}), 401)
+    # 1. 先從 Authorization header 拿 Bearer token
+    auth_header = request.headers.get("Authorization", "") or ""
+    token = None
 
-    # 支援兩種寫法：
-    # Authorization: Bearer xxx
-    # Authorization: xxx
     if auth_header.startswith("Bearer "):
         token = auth_header[len("Bearer "):].strip()
-    else:
-        token = auth_header.strip()
+
+    # 2. 如果 header 沒有，再退而求其次看 JSON body 裡有沒有 token（相容之前的寫法）
+    if not token:
+        data = request.get_json(silent=True) or {}
+        token = (data.get("token") or data.get("access_token") or "").strip()
 
     if not token:
         return None, (jsonify({"error": "missing token"}), 401)
 
+    # 3. 解碼 JWT
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-    except jwt.ExpiredSignatureError:
-        return None, (jsonify({"error": "token expired"}), 401)
+        payload = jwt.decode(
+            token,
+            current_app.config["JWT_SECRET"],   # 這裡跟你原本用的 key 要一致
+            algorithms=["HS256"]
+        )
     except jwt.InvalidTokenError:
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 這裡依照你之前 login 發 token 的內容來取 user
-    # 如果 payload 裡有 username 就這樣：
-    username = payload.get("username")
-    if not username:
-        return None, (jsonify({"error": "invalid token payload"}), 401)
+    # 4. 從 payload 裡拿 user 資料（依照你原本的設計調整）
+    #   這裡先假設你在簽 token 時放了 username & plan
+    username = payload.get("username") or payload.get("sub")
+    plan = payload.get("plan", "FREE")
+    expire_at = payload.get("expire_at")  # 如果你有塞進去的話
 
-    # 這裡改成你實際的「查 user」邏輯
-    user = get_user_by_username(username)  # <-- 用你自己的 function
-    if not user:
-        return None, (jsonify({"error": "user not found"}), 404)
+    if not username:
+        return None, (jsonify({"error": "invalid token"}), 401)
+
+    # 如果你是有 users DB 的，可以在這裡用 username 去查真正的 user
+    user = {
+        "username": username,
+        "plan": plan,
+        "expire_at": expire_at,
+    }
 
     return user, None
 
