@@ -305,40 +305,31 @@ JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")  # 例如這樣，照你實�
 
 
 def _decode_token_and_get_user():
-    """
-    從 Authorization: Bearer <token> 解析 JWT，
-    成功就回 (user_dict, None)，失敗回 (None, (json_response, status_code))
-    """
-    # 1. 拿 header
+    """解析 JWT，並從 DB 取得使用者資料"""
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
-        # 完全沒帶 token
         return None, (jsonify({"error": "missing token"}), 401)
 
-    token = auth_header.split(" ", 1)[1].strip()
-    if not token:
-        return None, (jsonify({"error": "missing token"}), 401)
+    token = auth_header.split(" ", 1)[1]
 
-    # 2. 解 JWT
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        data = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         return None, (jsonify({"error": "token expired"}), 401)
-    except jwt.InvalidTokenError:
+    except Exception:
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    username = payload.get("username")
+    username = data.get("username")
     if not username:
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 3. 查使用者資料（這裡照你原本的 users 存放方式）
-    #    假設你有一個 users_dict / get_user_by_username 之類的：
-    user = get_user_by_username(username)   # <--- 把這行換成你實際的查詢方式
+    # 在 JSON DB 中找使用者
+    user = db["users"].get(username)
     if not user:
         return None, (jsonify({"error": "user not found"}), 404)
 
-    # 4. 正常回傳
     return user, None
+
 
 
 
