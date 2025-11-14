@@ -289,59 +289,60 @@ def api_login():
 
 
 # ==== Auth: status / upgrade / check ====
-from flask import g
-
 from flask import request, jsonify
 import jwt
 from datetime import datetime
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")  # 你原本怎麼寫就用原本的
-
-
-
-
-# 你的 secret，照你原本的來源來：
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret")  # 例如這樣，照你實際的為主
-
+JWT_SECRET = os.getenv("JWT_SECRET", "change-me")  # 你專案原本用的那個常數，保持一致就好
 
 def _decode_token_and_get_user():
     """
-    從 Authorization: Bearer <JWT> 解析出 username，
-    再到 SQLite 的 users table 撈出使用者資料。
+    從 Authorization: Bearer <token> 解析出 user
+    回傳 (user, None) 或 (None, (json_response, status_code))
     """
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
+    auth_header = request.headers.get("Authorization", "") or ""
+    token = None
+
+    # 1) 從 Authorization header 拿 token
+    if auth_header:
+        # 允許 "Bearer xxx" 或只有 "xxx"
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+        else:
+            token = auth_header.strip()
+
+    if not token:
+        # 真的完全沒有 token
         return None, (jsonify({"error": "missing token"}), 401)
 
-    token = auth_header.split(" ", 1)[1].strip()
-
     try:
-        # 用和 create_access_token 一樣的 secret 解碼
-        data = jwt.decode(
-            token,
-            current_app.config["JWT_SECRET_KEY"],
-            algorithms=["HS256"],
-        )
+        # 2) 解 JWT
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         return None, (jsonify({"error": "token expired"}), 401)
-    except Exception as e:
-        current_app.logger.exception("JWT decode failed: %s", e)
+    except jwt.InvalidTokenError as e:
+        # 這行只會印在 Render log 裡，方便你之後查錯
+        print("JWT decode error:", repr(e))
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    username = data.get("username")
-    if not username:
+    # 3) 從 payload 拿出 user id（你 login 時是用什麼欄位就用什麼）
+    user_id = payload.get("sub")
+    if not user_id:
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    # ✅ 改成從 SQLite 抓使用者
-    conn = get_db()
-    cur = conn.execute("SELECT * FROM users WHERE username = ?", (username,))
-    user = cur.fetchone()
-    conn.close()
-
-    if not user:
+    # 4) 到資料庫查 user
+    db = get_db()  # 用你原本的取得 DB 的函式
+    cur = db.execute(
+        "SELECT id, username, plan, expire_at FROM users WHERE id = ?",
+        (user_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
         return None, (jsonify({"error": "user not found"}), 404)
 
+    user = dict(row)
     return user, None
+
 
 
 
