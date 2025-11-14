@@ -207,15 +207,32 @@ def ensure_user_table():
 ensure_user_table()
 
 
+# 上面已經有：
+# JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret")
+# JWT_ALG = "HS256"
+
 def create_token(user):
-    # 你原本 payload 帶 user_id/username/plan 和 12 小時效期
-    claims = {
+    """
+    用 PyJWT 產生自己的 JWT，確保 encode / decode 用同一套規則
+    """
+    now = datetime.utcnow()
+    payload = {
+        # sub 依規範應該是字串，避免 Subject must be a string
+        "sub": str(user["id"]),
         "username": user["username"],
         "plan": user["plan"],
+        # 發行時間
+        "iat": now,
+        # 過期時間（例如 12 小時後）
+        "exp": now + timedelta(hours=12),
     }
-    # 12 小時效期維持不變
-    token = create_access_token(identity=int(user["id"]), additional_claims=claims, expires_delta=timedelta(hours=12))
+
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+    # PyJWT 在某些版本會回 bytes，就強制轉成字串
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
     return token
+
 
 
 
@@ -296,57 +313,49 @@ JWT_ALG = "HS256"
 
 def _decode_token_and_get_user():
     """
-    從 Authorization: Bearer <token> 解析出 user。
-    失敗時回傳 (None, (json_response, status_code))
-    成功時回傳 (user_dict, None)
+    從 Authorization header 讀 Bearer JWT，
+    用 PyJWT 驗證並解碼，然後從 DB 撈出完整 user 資料。
     """
-
-    require_token = os.getenv("REQUIRE_TOKEN", "0") == "1"
-
     auth_header = request.headers.get("Authorization", "") or ""
-    auth_header = auth_header.strip()
+    if not auth_header.startswith("Bearer "):
+        return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 沒帶 token 的情況
-    if not auth_header:
-        if not require_token:
-            # 允許無 token，當成 FREE 匿名使用者
-            return {
-                "username": "guest",
-                "plan": "FREE",
-                "expire_at": None,
-            }, None
-        return None, (jsonify({"error": "missing token"}), 401)
-
-    # 解析 Bearer 前綴
-    token = auth_header
-    if auth_header.lower().startswith("bearer "):
-        token = auth_header[7:].strip()
-
+    token = auth_header[7:].strip()
     if not token:
-        return None, (jsonify({"error": "missing token"}), 401)
+        return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 真正解 token
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-    except jwt.ExpiredSignatureError as e:
-        print("[JWT] expired:", e)
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+    except jwt.ExpiredSignatureError:
         return None, (jsonify({"error": "token expired"}), 401)
-    except Exception as e:
-        # 這裡是關鍵：把實際錯誤 log 出來
-        print("[JWT] invalid token:", e, "header =", auth_header)
+    except jwt.InvalidTokenError as e:
+        current_app.logger.exception("[JWT] decode error: %s", e)
         return None, (jsonify({"error": "invalid token"}), 401)
 
+    user_id = payload.get("sub")
     username = payload.get("username")
-    if not username:
-        print("[JWT] payload missing username:", payload)
+    plan = payload.get("plan", "FREE")
+
+    if not user_id or not username:
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    user = _get_user(username)
-    if not user:
-        print("[JWT] user not found for username:", username)
+    # 從 DB 撈 user，順便拿 expire_at
+    conn = get_db()
+    cur = conn.execute("SELECT * FROM users WHERE id = ?", (int(user_id),))
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
         return None, (jsonify({"error": "user not found"}), 404)
 
+    user = {
+        "id": row["id"],
+        "username": row["username"],
+        "plan": row["plan"],
+        "expire_at": row["expire_at"],
+    }
     return user, None
+
 
 
 
