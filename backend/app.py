@@ -289,58 +289,55 @@ def api_login():
 
 
 # ==== Auth: status / upgrade / check ====
-from flask import request, jsonify
-import jwt
-from datetime import datetime
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me")  # 你專案原本用的那個常數，保持一致就好
+JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret")
+JWT_ALG = "HS256"
+
 
 def _decode_token_and_get_user():
     """
-    從 Authorization: Bearer <token> 解析出 user
-    回傳 (user, None) 或 (None, (json_response, status_code))
+    從 Authorization header 讀取 Bearer Token，
+    驗證並還原成 user 資訊。如果有任何錯誤，就回傳 (None, (jsonify(...), 401))
     """
-    auth_header = request.headers.get("Authorization", "") or ""
-    token = None
 
-    # 1) 從 Authorization header 拿 token
-    if auth_header:
-        # 允許 "Bearer xxx" 或只有 "xxx"
-        if auth_header.lower().startswith("bearer "):
-            token = auth_header.split(" ", 1)[1].strip()
-        else:
-            token = auth_header.strip()
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        # Header 沒帶 Bearer
+        return None, (jsonify({"error": "invalid token"}), 401)
 
+    # 拿出真正的 token 字串
+    token = auth_header[7:].strip()
     if not token:
-        # 真的完全沒有 token
-        return None, (jsonify({"error": "missing token"}), 401)
+        return None, (jsonify({"error": "invalid token"}), 401)
 
     try:
-        # 2) 解 JWT
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        # 解 JWT，使用跟 login 一樣的 secret / algorithm
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
     except jwt.ExpiredSignatureError:
+        # token 過期
         return None, (jsonify({"error": "token expired"}), 401)
     except jwt.InvalidTokenError as e:
-        # 這行只會印在 Render log 裡，方便你之後查錯
-        print("JWT decode error:", repr(e))
+        # 其他解碼問題，一律當作 invalid token
+        current_app.logger.exception("JWT decode error: %s", e)
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 3) 從 payload 拿出 user id（你 login 時是用什麼欄位就用什麼）
-    user_id = payload.get("sub")
-    if not user_id:
+    # 從 payload 撈出 user 資訊
+    username = payload.get("username")
+    plan = payload.get("plan", "FREE")
+
+    if not username:
+        # payload 裡連 username 都沒有，當作無效 token
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 4) 到資料庫查 user
-    db = get_db()  # 用你原本的取得 DB 的函式
-    cur = db.execute(
-        "SELECT id, username, plan, expire_at FROM users WHERE id = ?",
-        (user_id,),
-    )
-    row = cur.fetchone()
-    if row is None:
-        return None, (jsonify({"error": "user not found"}), 404)
+    # 這裡先只用 token 內資料，不再去查 DB
+    user = {
+        "username": username,
+        "plan": plan,
+        # 目前我們先不從 DB 拿 expire_at，先固定 None
+        "expire_at": None,
+    }
 
-    user = dict(row)
+    # 回傳 (user, None) 代表成功
     return user, None
 
 
