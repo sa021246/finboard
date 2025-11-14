@@ -296,49 +296,58 @@ JWT_ALG = "HS256"
 
 def _decode_token_and_get_user():
     """
-    從 Authorization header 讀取 Bearer Token，
-    驗證並還原成 user 資訊。如果有任何錯誤，就回傳 (None, (jsonify(...), 401))
+    從 Authorization: Bearer <token> 解析出 user。
+    失敗時回傳 (None, (json_response, status_code))
+    成功時回傳 (user_dict, None)
     """
 
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        # Header 沒帶 Bearer
-        return None, (jsonify({"error": "invalid token"}), 401)
+    require_token = os.getenv("REQUIRE_TOKEN", "0") == "1"
 
-    # 拿出真正的 token 字串
-    token = auth_header[7:].strip()
+    auth_header = request.headers.get("Authorization", "") or ""
+    auth_header = auth_header.strip()
+
+    # 沒帶 token 的情況
+    if not auth_header:
+        if not require_token:
+            # 允許無 token，當成 FREE 匿名使用者
+            return {
+                "username": "guest",
+                "plan": "FREE",
+                "expire_at": None,
+            }, None
+        return None, (jsonify({"error": "missing token"}), 401)
+
+    # 解析 Bearer 前綴
+    token = auth_header
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+
     if not token:
-        return None, (jsonify({"error": "invalid token"}), 401)
+        return None, (jsonify({"error": "missing token"}), 401)
 
+    # 真正解 token
     try:
-        # 解 JWT，使用跟 login 一樣的 secret / algorithm
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
-    except jwt.ExpiredSignatureError:
-        # token 過期
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError as e:
+        print("[JWT] expired:", e)
         return None, (jsonify({"error": "token expired"}), 401)
-    except jwt.InvalidTokenError as e:
-        # 其他解碼問題，一律當作 invalid token
-        current_app.logger.exception("JWT decode error: %s", e)
+    except Exception as e:
+        # 這裡是關鍵：把實際錯誤 log 出來
+        print("[JWT] invalid token:", e, "header =", auth_header)
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 從 payload 撈出 user 資訊
     username = payload.get("username")
-    plan = payload.get("plan", "FREE")
-
     if not username:
-        # payload 裡連 username 都沒有，當作無效 token
+        print("[JWT] payload missing username:", payload)
         return None, (jsonify({"error": "invalid token"}), 401)
 
-    # 這裡先只用 token 內資料，不再去查 DB
-    user = {
-        "username": username,
-        "plan": plan,
-        # 目前我們先不從 DB 拿 expire_at，先固定 None
-        "expire_at": None,
-    }
+    user = _get_user(username)
+    if not user:
+        print("[JWT] user not found for username:", username)
+        return None, (jsonify({"error": "user not found"}), 404)
 
-    # 回傳 (user, None) 代表成功
     return user, None
+
 
 
 
