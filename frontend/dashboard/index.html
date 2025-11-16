@@ -49,6 +49,24 @@
     </div>
   </div>
 
+
+  <!-- [PLAN_SECTION_START] 方案狀態區塊 -->
+  <div class="panel" style="margin-bottom:10px">
+    <div class="ph">
+      <div class="pt">My Plan</div>
+    </div>
+    <div class="pc">
+      <pre id="plan-status" class="mono muted">尚未載入方案狀態</pre>
+      <div style="margin-top:12px;text-align:right">
+        <button id="btn-upgrade" class="btn primary" disabled>
+          升級為 PRO（模擬）
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- [PLAN_SECTION_END] -->
+
+
   <div class="row">
     <div class="panel">
       <div class="ph">
@@ -160,9 +178,92 @@ async function echoAuth(){
     console.error('echo error', e);
   }
 }
+
+
+/* ===== Plan / Subscription Status ===== */
+const planStatusEl = document.querySelector('#plan-status');
+const upgradeBtn   = document.querySelector('#btn-upgrade');
+
+async function loadPlanStatus() {
+  if (!planStatusEl || !upgradeBtn) return;
+
+  try {
+    const j = await jget(`${API_BASE}/api/auth/status`);
+
+    if (!j || !j.ok) {
+      planStatusEl.textContent = '尚未登入或 Token 無效。';
+      upgradeBtn.disabled = true;
+      return;
+    }
+
+    const u = j.user || {};
+    const username       = u.username || '(未知)';
+    const plan           = u.plan || '(未設定)';
+    const expire_at      = u.expire_at;
+    const remaining_days = u.remaining_days;
+    const is_active      = !!u.is_active;
+
+    let msg = `使用者：${username}\n方案：${plan}`;
+    if (expire_at) msg += `\n到期日：${expire_at}`;
+    if (remaining_days != null) msg += `\n剩餘天數：${remaining_days}`;
+    msg += `\n狀態：${is_active ? '啟用中' : '未啟用 / 已到期'}`;
+
+    planStatusEl.textContent = msg;
+
+    // 只有 FREE 可以按升級
+    upgradeBtn.disabled = plan !== 'FREE';
+  } catch (e) {
+    console.error('loadPlanStatus error', e);
+    planStatusEl.textContent = '讀取方案狀態失敗';
+    upgradeBtn.disabled = true;
+  }
+}
+
+async function upgradePlan() {
+  if (!upgradeBtn) return;
+
+  const t = getTok();
+  if (!t) {
+    alert('請先貼上 Token 並按 Save 才能升級。');
+    return;
+  }
+
+  try {
+    const j = await jpost(`${API_BASE}/api/auth/upgrade`, {
+      plan: 'PRO',
+      days: 30,   // 依後端邏輯調整
+    });
+
+    if (!j || !j.ok) {
+      alert('升級失敗：' + (j && j.message ? j.message : '未知錯誤'));
+      return;
+    }
+
+    alert('升級成功！已啟用 PRO 方案。');
+    await loadPlanStatus();
+  } catch (e) {
+    console.error('upgradePlan error', e);
+    alert('升級失敗（請查看 Console）');
+  }
+}
+
+// 按鈕掛事件
+if (upgradeBtn) {
+  upgradeBtn.addEventListener('click', upgradePlan);
+}
+
+
+
 setTok(getTok());
 echoAuth();
-saveTok.addEventListener('click', () => { setTok(tokenEl.value.trim()); echoAuth(); });
+loadPlanStatus();  // 加這行：頁面載入時就嘗試讀方案狀態
+
+saveTok.addEventListener('click', () => {
+  setTok(tokenEl.value.trim());
+  echoAuth();
+  loadPlanStatus();  // Token 更新後也重抓方案
+});
+
 
 /* ===== Watchlist ===== */
 const wlT  = document.querySelector('#wl tbody');
