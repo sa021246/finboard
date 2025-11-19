@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sa021246/finboard/main/assets/finboard_logo_main.png" width="260"/>
+  <img src="https://raw.githubusercontent.com/sa021246/finboard/main/assets/ChatGPT Image 2025年11月19日 下午08_49_02.png" width="260"/>
 </p>
 
 # 🚀 FinBoard  
